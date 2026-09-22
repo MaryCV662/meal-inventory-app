@@ -292,7 +292,7 @@
       state.mealPlan = {};
       (results[2].data||[]).forEach(function(r){
         if(!state.mealPlan[r.date]) state.mealPlan[r.date] = {breakfast:null,lunch:null,dinner:null};
-        state.mealPlan[r.date][r.meal] = r.recipe_id;
+        state.mealPlan[r.date][r.meal] = { recipe_id: r.recipe_id, cooked: !!r.cooked };
       });
       state.groceryList = (results[3].data||[]).map(rowToGrocery);
       renderPantry(); renderRecipes(); renderPlan(); renderGrocery();
@@ -328,7 +328,7 @@
       .on("postgres_changes", {event:"*", schema:"public", table:"meal_plan"}, function(payload){
         var row = payload.eventType === "DELETE" ? payload.old : payload.new;
         if(!state.mealPlan[row.date]) state.mealPlan[row.date] = {breakfast:null,lunch:null,dinner:null};
-        state.mealPlan[row.date][row.meal] = (payload.eventType === "DELETE") ? null : row.recipe_id;
+        state.mealPlan[row.date][row.meal] = (payload.eventType === "DELETE") ? null : { recipe_id: row.recipe_id, cooked: !!row.cooked };
         renderPlan();
       }).subscribe();
 
@@ -681,10 +681,11 @@
       dates.forEach(function(d){
         var key = toISODate(d);
         var dayPlan = state.mealPlan[key] || {};
-        var recipeId = dayPlan[meal];
+        var slot = dayPlan[meal];
+        var recipeId = slot ? slot.recipe_id : null;
         var recipe = recipeId ? recipesById[recipeId] : null;
         html += '<div class="cell"><div class="plan-slot" data-date="'+key+'" data-meal="'+meal+'">' +
-          (recipe ? '<div class="name">'+escapeHtml(recipe.name)+'</div>' : '<div class="placeholder">+ add</div>') +
+          (recipe ? '<div class="name">'+(slot.cooked ? '✅ ' : '')+escapeHtml(recipe.name)+'</div>' : '<div class="placeholder">+ add</div>') +
           '</div></div>';
       });
     });
@@ -702,12 +703,33 @@
     currentWeekStart = startOfWeek(new Date()); renderPlan();
   });
 
+  function deductPantryForRecipe(recipe){
+    var ops = [];
+    (recipe.ingredients||[]).forEach(function(ing){
+      var matches = pantryMatchesFor(ing.name).filter(function(p){ return (p.unit||"") === (ing.unit||""); });
+      var remaining = parseFloat(ing.qty) || 0;
+      for(var i=0; i<matches.length && remaining > 0; i++){
+        var match = matches[i];
+        var have = parseFloat(match.qty) || 0;
+        var used = Math.min(have, remaining);
+        if(used <= 0) continue;
+        var newQty = have - used;
+        remaining -= used;
+        ops.push(supabase.from("pantry").update({qty:newQty}).eq("id", match.id));
+      }
+    });
+    return Promise.all(ops);
+  }
+
   document.getElementById("planGrid").addEventListener("click", function(e){
-    var slot = e.target.closest(".plan-slot");
-    if(!slot) return;
-    var date = slot.getAttribute("data-date");
-    var meal = slot.getAttribute("data-meal");
-    var current = (state.mealPlan[date] || {})[meal] || "";
+    var slotEl = e.target.closest(".plan-slot");
+    if(!slotEl) return;
+    var date = slotEl.getAttribute("data-date");
+    var meal = slotEl.getAttribute("data-meal");
+    var slot = (state.mealPlan[date] || {})[meal];
+    var current = slot ? slot.recipe_id : "";
+    var isCooked = slot ? !!slot.cooked : false;
+    var currentRecipe = current ? state.recipes.find(function(r){ return r.id === current; }) : null;
     var options = '<option value="">— none —</option>' + state.recipes.slice().sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(r){
       return '<option value="'+r.id+'"'+(r.id===current?' selected':'')+'>'+escapeHtml(r.name)+'</option>';
     }).join("");
@@ -715,20 +737,34 @@
       '<h2>'+meal.charAt(0).toUpperCase()+meal.slice(1)+' — '+fmtDate(date)+'</h2>' +
       '<div class="field"><label>Recipe</label><select id="p_recipe">'+options+'</select></div>' +
       (state.recipes.length ? '' : '<div class="muted">No recipes yet — add one on the Recipes tab first.</div>') +
+      (currentRecipe ? '<div class="muted">'+(isCooked ? '✅ Marked as cooked — ingredients already deducted from pantry.' : 'Not cooked yet.')+'</div>' : '') +
       '<div class="row" style="justify-content:flex-end;margin-top:10px;">' +
         '<button class="btn secondary" id="p_cancel">Cancel</button>' +
+        (currentRecipe && !isCooked ? '<button class="btn secondary" id="p_cook">Mark as cooked</button>' : '') +
         '<button class="btn" id="p_save">Save</button>' +
       '</div>',
       function(root){
         root.querySelector("#p_cancel").addEventListener("click", closeModal);
         root.querySelector("#p_save").addEventListener("click", function(){
           var val = root.querySelector("#p_recipe").value || null;
-          supabase.from("meal_plan").upsert({date: date, meal: meal, recipe_id: val}, {onConflict: "date,meal"})
+          supabase.from("meal_plan").upsert({date: date, meal: meal, recipe_id: val, cooked: false}, {onConflict: "date,meal"})
             .then(function(res){
               if(res.error) throw res.error;
               closeModal();
             }).catch(function(err){ reportError(err, "Failed to save meal plan"); });
         });
+        var cookBtn = root.querySelector("#p_cook");
+        if(cookBtn){
+          cookBtn.addEventListener("click", function(){
+            deductPantryForRecipe(currentRecipe).then(function(results){
+              results.forEach(function(r){ if(r && r.error) throw r.error; });
+              return supabase.from("meal_plan").upsert({date: date, meal: meal, recipe_id: current, cooked: true}, {onConflict: "date,meal"});
+            }).then(function(res){
+              if(res.error) throw res.error;
+              closeModal();
+            }).catch(function(err){ reportError(err, "Failed to mark meal as cooked"); });
+          });
+        }
       }
     );
   });
@@ -833,7 +869,7 @@
       var dayPlan = state.mealPlan[key];
       if(!dayPlan) return;
       MEALS.forEach(function(meal){
-        var recipeId = dayPlan[meal];
+        var recipeId = dayPlan[meal] ? dayPlan[meal].recipe_id : null;
         if(!recipeId) return;
         var recipe = recipesById[recipeId];
         if(!recipe) return;

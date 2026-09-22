@@ -27,9 +27,12 @@ create table if not exists meal_plan (
   date date not null,
   meal text not null check (meal in ('breakfast','lunch','dinner')),
   recipe_id uuid references recipes(id) on delete set null,
+  cooked boolean default false,
   updated_at timestamptz default now(),
   primary key (date, meal)
 );
+
+alter table meal_plan add column if not exists cooked boolean default false;
 
 create table if not exists grocery_list (
   id uuid primary key default gen_random_uuid(),
