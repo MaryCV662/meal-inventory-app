@@ -4,24 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Meal Inventory &amp; Grocery Planner</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Meal Planner">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
-    --bg:#f5f6f8; --panel:#ffffff; --border:#e1e4e9; --text:#1f2430; --muted:#6b7280;
-    --accent:#2f6f4f; --accent-dark:#245a3f; --danger:#c0392b; --warn:#b8860b;
-    --ok-bg:#e6f4ea; --ok-fg:#1e7a3c; --warn-bg:#fff6e0; --warn-fg:#8a6300; --bad-bg:#fdecea; --bad-fg:#c0392b;
+    --bg:#000000; --panel:#121212; --border:#2a2a2a; --text:#f0f0f0; --muted:#9aa1ac;
+    --accent:#4caf7d; --accent-dark:#3e8f66; --danger:#e0574a; --warn:#d8a934;
+    --ok-bg:#12331f; --ok-fg:#7fd9a1; --warn-bg:#332a10; --warn-fg:#e3c56b; --bad-bg:#3a1917; --bad-fg:#f19489;
     --radius:8px;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --bg:#15171c; --panel:#1e2128; --border:#2c313a; --text:#e7e9ee; --muted:#9aa1ac;
-      --accent:#4caf7d; --accent-dark:#3e8f66; --danger:#e0574a; --warn:#d8a934;
-      --ok-bg:#12331f; --ok-fg:#7fd9a1; --warn-bg:#332a10; --warn-fg:#e3c56b; --bad-bg:#3a1917; --bad-fg:#f19489;
-    }
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
   header{padding:18px 24px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
   header h1{font-size:1.25rem;margin:0;}
+  .sync-status{font-size:0.78rem;color:var(--muted);}
   nav{display:flex;gap:6px;flex-wrap:wrap;}
   nav button{padding:8px 14px;border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:var(--radius);cursor:pointer;font-size:0.9rem;}
   nav button.active{background:var(--accent);border-color:var(--accent);color:#fff;}
@@ -86,8 +88,11 @@
 </style>
 </head>
 <body>
+
+<div id="appRoot">
 <header>
   <h1>🥕 Meal Inventory &amp; Grocery Planner</h1>
+  <div class="sync-status" id="syncStatus">Connecting…</div>
   <nav id="tabNav">
     <button data-tab="pantry" class="active">Pantry</button>
     <button data-tab="recipes">Recipes</button>
@@ -168,6 +173,7 @@
   </section>
 
 </main>
+</div>
 
 <div id="modalRoot"></div>
 
@@ -175,37 +181,26 @@
 (function(){
   "use strict";
 
+  var SUPABASE_URL = "https://cujoeimzafephvplopxk.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_VO4cOv0yeQliDsshtbpMDg_lylZieLO";
+
   var CATEGORIES = ["Produce","Dairy","Meat & Seafood","Frozen","Pantry / Dry Goods","Bakery","Beverages","Condiments & Spices","Other"];
   var UNITS = ["pcs","g","kg","ml","l","oz","lb","cup","tbsp","tsp","can","bag","box","bunch","dozen","clove","slice"];
   var DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   var MEALS = ["breakfast","lunch","dinner"];
-  var STORAGE_KEY = "mealInventoryAppState_v1";
 
-  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+  var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  var state = { pantry: [], recipes: [], mealPlan: {}, groceryList: [] };
 
-  function loadState(){
-    try{
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if(raw){
-        var parsed = JSON.parse(raw);
-        parsed.pantry = parsed.pantry || [];
-        parsed.recipes = parsed.recipes || [];
-        parsed.mealPlan = parsed.mealPlan || {};
-        parsed.groceryList = parsed.groceryList || [];
-        return parsed;
-      }
-    }catch(e){ console.warn("Failed to load saved state", e); }
-    return { pantry: [], recipes: [], mealPlan: {}, groceryList: [] };
+  function setSyncStatus(text){ var el = document.getElementById("syncStatus"); if(el) el.textContent = text; }
+
+  function reportError(err, context){
+    console.error(context, err);
+    alert((context ? context + ": " : "") + (err && err.message ? err.message : "Something went wrong. Check your connection and try again."));
   }
-
-  function saveState(){
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-    catch(e){ console.warn("Failed to save state", e); }
-  }
-
-  var state = loadState();
 
   // ---------- helpers ----------
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
   function normName(s){ return (s||"").trim().toLowerCase(); }
 
   function parseDateLocal(str){
@@ -254,7 +249,6 @@
     });
   }
 
-  // Sum pantry quantity available for a given ingredient name (only summing entries with matching unit if possible)
   function pantryMatchesFor(name){
     var n = normName(name);
     return state.pantry.filter(function(p){ return normName(p.name) === n; });
@@ -269,9 +263,100 @@
       if(total >= (parseFloat(ing.qty)||0)) return {status:"have", have:total};
       return {status:"partial", have:total};
     }
-    // matches exist but units differ from the recipe's unit - can't reliably compare quantities
     return {status:"check", have:null};
   }
+
+  // ---------- row <-> app-state mapping ----------
+  function rowToPantryItem(row){
+    return { id: row.id, name: row.name, category: row.category || "", qty: (row.qty===null||row.qty===undefined)?"":row.qty,
+      unit: row.unit || "", expiration: row.expiration || "", threshold: (row.threshold===null||row.threshold===undefined)?"":row.threshold };
+  }
+  function rowToRecipe(row){
+    return { id: row.id, name: row.name, tags: row.tags || "", instructions: row.instructions || "", ingredients: row.ingredients || [] };
+  }
+  function rowToGrocery(row){
+    return { id: row.id, name: row.name, qty: (row.qty===null||row.qty===undefined)?"":row.qty, unit: row.unit || "", checked: !!row.checked, source: row.source || "" };
+  }
+
+  // ---------- initial load ----------
+  function loadAllData(){
+    return Promise.all([
+      supabase.from("pantry").select("*"),
+      supabase.from("recipes").select("*"),
+      supabase.from("meal_plan").select("*"),
+      supabase.from("grocery_list").select("*")
+    ]).then(function(results){
+      results.forEach(function(r){ if(r.error) throw r.error; });
+      state.pantry = (results[0].data||[]).map(rowToPantryItem);
+      state.recipes = (results[1].data||[]).map(rowToRecipe);
+      state.mealPlan = {};
+      (results[2].data||[]).forEach(function(r){
+        if(!state.mealPlan[r.date]) state.mealPlan[r.date] = {breakfast:null,lunch:null,dinner:null};
+        state.mealPlan[r.date][r.meal] = r.recipe_id;
+      });
+      state.groceryList = (results[3].data||[]).map(rowToGrocery);
+      renderPantry(); renderRecipes(); renderPlan(); renderGrocery();
+    });
+  }
+
+  function subscribeRealtime(){
+    supabase.channel("pantry-changes")
+      .on("postgres_changes", {event:"*", schema:"public", table:"pantry"}, function(payload){
+        if(payload.eventType === "DELETE"){
+          state.pantry = state.pantry.filter(function(p){ return p.id !== payload.old.id; });
+        } else {
+          var item = rowToPantryItem(payload.new);
+          var idx = state.pantry.findIndex(function(p){ return p.id === item.id; });
+          if(idx >= 0) state.pantry[idx] = item; else state.pantry.push(item);
+        }
+        renderPantry(); renderRecipes();
+      }).subscribe();
+
+    supabase.channel("recipes-changes")
+      .on("postgres_changes", {event:"*", schema:"public", table:"recipes"}, function(payload){
+        if(payload.eventType === "DELETE"){
+          state.recipes = state.recipes.filter(function(r){ return r.id !== payload.old.id; });
+        } else {
+          var item = rowToRecipe(payload.new);
+          var idx = state.recipes.findIndex(function(r){ return r.id === item.id; });
+          if(idx >= 0) state.recipes[idx] = item; else state.recipes.push(item);
+        }
+        renderRecipes(); renderPlan();
+      }).subscribe();
+
+    supabase.channel("mealplan-changes")
+      .on("postgres_changes", {event:"*", schema:"public", table:"meal_plan"}, function(payload){
+        var row = payload.eventType === "DELETE" ? payload.old : payload.new;
+        if(!state.mealPlan[row.date]) state.mealPlan[row.date] = {breakfast:null,lunch:null,dinner:null};
+        state.mealPlan[row.date][row.meal] = (payload.eventType === "DELETE") ? null : row.recipe_id;
+        renderPlan();
+      }).subscribe();
+
+    supabase.channel("grocery-changes")
+      .on("postgres_changes", {event:"*", schema:"public", table:"grocery_list"}, function(payload){
+        if(payload.eventType === "DELETE"){
+          state.groceryList = state.groceryList.filter(function(g){ return g.id !== payload.old.id; });
+        } else {
+          var item = rowToGrocery(payload.new);
+          var idx = state.groceryList.findIndex(function(g){ return g.id === item.id; });
+          if(idx >= 0) state.groceryList[idx] = item; else state.groceryList.push(item);
+        }
+        renderGrocery();
+      }).subscribe();
+  }
+
+  function initApp(){
+    setSyncStatus("Connecting…");
+    loadAllData().then(function(){
+      subscribeRealtime();
+      setSyncStatus("🟢 Synced — shared live");
+    }).catch(function(err){
+      setSyncStatus("⚠ Connection error");
+      reportError(err, "Failed to load data");
+    });
+  }
+
+  initApp();
 
   // ---------- tab switching ----------
   document.getElementById("tabNav").addEventListener("click", function(e){
@@ -329,7 +414,6 @@
     items.sort(function(a,b){
       if(sortBy === "name") return a.name.localeCompare(b.name);
       if(sortBy === "category") return (a.category||"").localeCompare(b.category||"");
-      // expiration soonest first, items with no expiration go last
       var da = daysUntil(a.expiration), db = daysUntil(b.expiration);
       if(da === null && db === null) return a.name.localeCompare(b.name);
       if(da === null) return 1;
@@ -397,22 +481,21 @@
       root.querySelector("#f_save").addEventListener("click", function(){
         var name = root.querySelector("#f_name").value.trim();
         if(!name) { root.querySelector("#f_name").focus(); return; }
-        var data = {
-          id: item && item.id ? item.id : uid(),
+        var payload = {
           name: name,
           category: root.querySelector("#f_category").value,
-          qty: root.querySelector("#f_qty").value || "0",
+          qty: parseFloat(root.querySelector("#f_qty").value) || 0,
           unit: root.querySelector("#f_unit").value,
-          expiration: root.querySelector("#f_exp").value,
-          threshold: root.querySelector("#f_thresh").value
+          expiration: root.querySelector("#f_exp").value || null,
+          threshold: root.querySelector("#f_thresh").value === "" ? null : parseFloat(root.querySelector("#f_thresh").value)
         };
-        if(item && item.id){
-          var idx = state.pantry.findIndex(function(p){ return p.id === item.id; });
-          state.pantry[idx] = data;
-        } else {
-          state.pantry.push(data);
-        }
-        saveState(); closeModal(); renderPantry(); renderRecipes();
+        var req = (item && item.id)
+          ? supabase.from("pantry").update(payload).eq("id", item.id)
+          : supabase.from("pantry").insert(payload);
+        req.then(function(res){
+          if(res.error) throw res.error;
+          closeModal();
+        }).catch(function(err){ reportError(err, "Failed to save pantry item"); });
       });
     });
   }
@@ -429,8 +512,9 @@
       openPantryForm(item);
     } else if(delId){
       if(confirm("Delete this pantry item?")){
-        state.pantry = state.pantry.filter(function(p){ return p.id !== delId; });
-        saveState(); renderPantry(); renderRecipes();
+        supabase.from("pantry").delete().eq("id", delId).then(function(res){
+          if(res.error) throw res.error;
+        }).catch(function(err){ reportError(err, "Failed to delete pantry item"); });
       }
     }
   });
@@ -522,20 +606,19 @@
             unit: row.querySelector(".ing-unit").value
           });
         });
-        var data = {
-          id: recipe && recipe.id ? recipe.id : uid(),
+        var payload = {
           name: name,
           tags: root.querySelector("#r_tags").value.trim(),
           instructions: root.querySelector("#r_instructions").value,
           ingredients: ingredients
         };
-        if(recipe && recipe.id){
-          var idx = state.recipes.findIndex(function(r){ return r.id === recipe.id; });
-          state.recipes[idx] = data;
-        } else {
-          state.recipes.push(data);
-        }
-        saveState(); closeModal(); renderRecipes(); renderPlan();
+        var req = (recipe && recipe.id)
+          ? supabase.from("recipes").update(payload).eq("id", recipe.id)
+          : supabase.from("recipes").insert(payload);
+        req.then(function(res){
+          if(res.error) throw res.error;
+          closeModal();
+        }).catch(function(err){ reportError(err, "Failed to save recipe"); });
       });
     });
   }
@@ -549,20 +632,17 @@
       openRecipeForm(state.recipes.find(function(r){ return r.id === editId; }));
     } else if(delId){
       if(confirm("Delete this recipe? It will be removed from any planned meals.")){
-        state.recipes = state.recipes.filter(function(r){ return r.id !== delId; });
-        Object.keys(state.mealPlan).forEach(function(dateKey){
-          var day = state.mealPlan[dateKey];
-          MEALS.forEach(function(m){ if(day[m] === delId) day[m] = null; });
-        });
-        saveState(); renderRecipes(); renderPlan();
+        supabase.from("recipes").delete().eq("id", delId).then(function(res){
+          if(res.error) throw res.error;
+        }).catch(function(err){ reportError(err, "Failed to delete recipe"); });
       }
     }
   });
 
   // ================= MEAL PLAN =================
   function startOfWeek(d){
-    var day = d.getDay(); // 0 = Sun
-    var diff = (day === 0 ? -6 : 1 - day); // shift to Monday
+    var day = d.getDay();
+    var diff = (day === 0 ? -6 : 1 - day);
     var monday = new Date(d);
     monday.setDate(d.getDate() + diff);
     monday.setHours(0,0,0,0);
@@ -642,10 +722,12 @@
       function(root){
         root.querySelector("#p_cancel").addEventListener("click", closeModal);
         root.querySelector("#p_save").addEventListener("click", function(){
-          var val = root.querySelector("#p_recipe").value;
-          if(!state.mealPlan[date]) state.mealPlan[date] = {breakfast:null,lunch:null,dinner:null};
-          state.mealPlan[date][meal] = val || null;
-          saveState(); closeModal(); renderPlan();
+          var val = root.querySelector("#p_recipe").value || null;
+          supabase.from("meal_plan").upsert({date: date, meal: meal, recipe_id: val}, {onConflict: "date,meal"})
+            .then(function(res){
+              if(res.error) throw res.error;
+              closeModal();
+            }).catch(function(err){ reportError(err, "Failed to save meal plan"); });
         });
       }
     );
@@ -655,17 +737,17 @@
   fillSelectOptions(document.getElementById("groceryNewUnit"), UNITS, false);
 
   function addGroceryItem(name, qty, unit, source){
-    // merge with an existing unchecked item of the same name+unit
     var existing = state.groceryList.find(function(g){
       return !g.checked && normName(g.name) === normName(name) && (g.unit||"") === (unit||"");
     });
     if(existing){
-      existing.qty = (parseFloat(existing.qty)||0) + (parseFloat(qty)||0);
-      if(source && existing.source && existing.source.indexOf(source) === -1) existing.source += ", " + source;
-      else if(source && !existing.source) existing.source = source;
-    } else {
-      state.groceryList.push({ id: uid(), name: name, qty: qty || "", unit: unit || "", checked:false, source: source || "" });
+      var newQty = (parseFloat(existing.qty)||0) + (parseFloat(qty)||0);
+      var newSource = existing.source;
+      if(source && newSource && newSource.indexOf(source) === -1) newSource += ", " + source;
+      else if(source && !newSource) newSource = source;
+      return supabase.from("grocery_list").update({qty:newQty, source:newSource}).eq("id", existing.id);
     }
+    return supabase.from("grocery_list").insert({ name: name, qty: parseFloat(qty)||0, unit: unit || "", checked:false, source: source || "" });
   }
 
   function renderGrocery(){
@@ -693,57 +775,58 @@
     if(!name) return;
     var qty = document.getElementById("groceryNewQty").value;
     var unit = document.getElementById("groceryNewUnit").value;
-    addGroceryItem(name, qty, unit, "manual");
-    document.getElementById("groceryNewName").value = "";
-    document.getElementById("groceryNewQty").value = "";
-    saveState(); renderGrocery();
+    addGroceryItem(name, qty, unit, "manual").then(function(res){
+      if(res.error) throw res.error;
+      document.getElementById("groceryNewName").value = "";
+      document.getElementById("groceryNewQty").value = "";
+    }).catch(function(err){ reportError(err, "Failed to add grocery item"); });
   });
 
   document.getElementById("groceryListEl").addEventListener("click", function(e){
     var checkId = e.target.getAttribute("data-check");
     var delId = e.target.getAttribute("data-del-grocery");
     if(checkId){
-      var item = state.groceryList.find(function(g){ return g.id === checkId; });
-      item.checked = e.target.checked;
-      saveState(); renderGrocery();
+      supabase.from("grocery_list").update({checked: e.target.checked}).eq("id", checkId).then(function(res){
+        if(res.error) throw res.error;
+      }).catch(function(err){ reportError(err, "Failed to update item"); });
     } else if(delId){
-      state.groceryList = state.groceryList.filter(function(g){ return g.id !== delId; });
-      saveState(); renderGrocery();
+      supabase.from("grocery_list").delete().eq("id", delId).then(function(res){
+        if(res.error) throw res.error;
+      }).catch(function(err){ reportError(err, "Failed to remove item"); });
     }
   });
 
   document.getElementById("clearCheckedBtn").addEventListener("click", function(){
-    state.groceryList = state.groceryList.filter(function(g){ return !g.checked; });
-    saveState(); renderGrocery();
+    supabase.from("grocery_list").delete().eq("checked", true).then(function(res){
+      if(res.error) throw res.error;
+    }).catch(function(err){ reportError(err, "Failed to clear checked items"); });
   });
   document.getElementById("clearAllGroceryBtn").addEventListener("click", function(){
     if(state.groceryList.length && !confirm("Clear the entire grocery list?")) return;
-    state.groceryList = [];
-    saveState(); renderGrocery();
+    supabase.from("grocery_list").delete().not("id","is",null).then(function(res){
+      if(res.error) throw res.error;
+    }).catch(function(err){ reportError(err, "Failed to clear grocery list"); });
   });
 
   document.getElementById("addLowStockBtn").addEventListener("click", function(){
-    var added = 0;
-    state.pantry.forEach(function(p){
-      if(p.threshold === "" || p.threshold === null || p.threshold === undefined) return;
-      if(parseFloat(p.qty) <= parseFloat(p.threshold)){
-        var needed = (parseFloat(p.threshold)*2) - parseFloat(p.qty);
-        if(needed <= 0) needed = parseFloat(p.threshold) || 1;
-        addGroceryItem(p.name, needed, p.unit, "low stock");
-        added++;
-      }
+    var toAdd = state.pantry.filter(function(p){
+      return p.threshold !== "" && p.threshold !== null && p.threshold !== undefined && parseFloat(p.qty) <= parseFloat(p.threshold);
     });
-    saveState(); renderGrocery();
-    if(!added) alert("No pantry items are currently below their low-stock threshold.");
-    else {
+    if(!toAdd.length){ alert("No pantry items are currently below their low-stock threshold."); return; }
+    Promise.all(toAdd.map(function(p){
+      var needed = (parseFloat(p.threshold)*2) - parseFloat(p.qty);
+      if(needed <= 0) needed = parseFloat(p.threshold) || 1;
+      return addGroceryItem(p.name, needed, p.unit, "low stock");
+    })).then(function(results){
+      results.forEach(function(r){ if(r.error) throw r.error; });
       document.querySelector('#tabNav button[data-tab="grocery"]').click();
-    }
+    }).catch(function(err){ reportError(err, "Failed to add low-stock items"); });
   });
 
   document.getElementById("genGroceryFromPlanBtn").addEventListener("click", function(){
     var recipesById = {};
     state.recipes.forEach(function(r){ recipesById[r.id] = r; });
-    var needed = {}; // key: name|unit -> qty
+    var needed = {};
 
     weekDates().forEach(function(d){
       var key = toISODate(d);
@@ -762,31 +845,32 @@
       });
     });
 
-    var added = 0;
+    var toBuyList = [];
     Object.keys(needed).forEach(function(k){
       var ing = needed[k];
       var status = ingredientStatus({name: ing.name, qty: ing.qty, unit: ing.unit});
       var toBuy = 0;
       if(status.status === "missing") toBuy = ing.qty;
       else if(status.status === "partial") toBuy = ing.qty - status.have;
-      else if(status.status === "check") toBuy = ing.qty; // units differ, can't be sure — list full amount for review
-      if(toBuy > 0){
-        addGroceryItem(ing.name, Math.round(toBuy*100)/100, ing.unit, "meal plan");
-        added++;
-      }
+      else if(status.status === "check") toBuy = ing.qty;
+      if(toBuy > 0) toBuyList.push({name: ing.name, unit: ing.unit, qty: Math.round(toBuy*100)/100});
     });
-    saveState(); renderGrocery();
-    if(!added) alert("Nothing to add — pantry already covers this week's planned meals, or no meals are planned yet.");
-    else {
-      document.querySelector('#tabNav button[data-tab="grocery"]').click();
-    }
+
+    if(!toBuyList.length){ alert("Nothing to add — pantry already covers this week's planned meals, or no meals are planned yet."); return; }
+
+    Promise.all(toBuyList.map(function(ing){ return addGroceryItem(ing.name, ing.qty, ing.unit, "meal plan"); }))
+      .then(function(results){
+        results.forEach(function(r){ if(r.error) throw r.error; });
+        document.querySelector('#tabNav button[data-tab="grocery"]').click();
+      }).catch(function(err){ reportError(err, "Failed to add ingredients to grocery list"); });
   });
 
-  // ---------- initial render ----------
-  renderPantry();
-  renderRecipes();
-  renderPlan();
-  renderGrocery();
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("/sw.js").catch(function(err){ console.warn("Service worker registration failed", err); });
+    });
+  }
+
 })();
 </script>
 </body>
