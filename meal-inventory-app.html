@@ -12,78 +12,105 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Meal Planner">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#000000; --panel:#121212; --border:#2a2a2a; --text:#f0f0f0; --muted:#9aa1ac;
-    --accent:#4caf7d; --accent-dark:#3e8f66; --danger:#e0574a; --warn:#d8a934;
-    --ok-bg:#12331f; --ok-fg:#7fd9a1; --warn-bg:#332a10; --warn-fg:#e3c56b; --bad-bg:#3a1917; --bad-fg:#f19489;
-    --radius:8px;
+    --bg:#0a0a0c; --panel:#151518; --panel-2:#1c1c20; --border:#2a2a30; --text:#f2f2f4; --muted:#93939d;
+    --accent:#37c47a; --accent-2:#2ea3d6; --accent-dark:#2a9c60; --danger:#f0564a; --warn:#e0a934;
+    --ok-bg:#123322; --ok-fg:#6bdf9f; --warn-bg:#3a2c0d; --warn-fg:#f0c765; --bad-bg:#3d1a17; --bad-fg:#f4948a;
+    --grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+    --radius:14px; --radius-sm:9px;
+    --shadow: 0 8px 24px rgba(0,0,0,0.35);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
   }
   *{box-sizing:border-box;}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
-  header{padding:18px 24px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
-  header h1{font-size:1.25rem;margin:0;}
-  .sync-status{font-size:0.78rem;color:var(--muted);}
-  nav{display:flex;gap:6px;flex-wrap:wrap;}
-  nav button{padding:8px 14px;border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:var(--radius);cursor:pointer;font-size:0.9rem;}
-  nav button.active{background:var(--accent);border-color:var(--accent);color:#fff;}
-  main{max-width:1100px;margin:0 auto;padding:20px 16px 60px;}
+  body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:
+    radial-gradient(1200px 500px at 15% -10%, rgba(55,196,122,0.10), transparent 60%),
+    radial-gradient(1000px 500px at 100% 0%, rgba(46,163,214,0.08), transparent 55%),
+    var(--bg);
+    color:var(--text);-webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:'Poppins',sans-serif;}
+  header{padding:18px 28px;border-bottom:1px solid var(--border);background:rgba(21,21,24,0.75);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;position:sticky;top:0;z-index:40;}
+  header h1{font-size:1.3rem;margin:0;font-weight:700;letter-spacing:-0.01em;display:flex;align-items:center;gap:10px;}
+  header h1 .brand-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  header h1 .brand-icon{font-size:1.5rem;filter:drop-shadow(0 2px 6px rgba(55,196,122,0.4));}
+  .sync-status{font-size:0.78rem;color:var(--muted);display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--panel-2);border:1px solid var(--border);}
+  nav{display:flex;gap:6px;flex-wrap:wrap;background:var(--panel-2);padding:5px;border-radius:999px;border:1px solid var(--border);}
+  nav button{padding:8px 16px;border:none;background:transparent;color:var(--muted);border-radius:999px;cursor:pointer;font-size:0.88rem;font-weight:600;font-family:inherit;transition:all 0.2s ease;white-space:nowrap;}
+  nav button:hover{color:var(--text);}
+  nav button.active{background:var(--grad);color:#08150f;box-shadow:0 3px 10px rgba(55,196,122,0.35);}
+  main{max-width:1100px;margin:0 auto;padding:24px 16px 60px;animation:fadeIn 0.35s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
   .tab{display:none;}
   .tab.active{display:block;}
-  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:18px;box-shadow:var(--shadow-sm);}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
   .row > *{margin:0;}
-  input,select,textarea{padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:0.9rem;font-family:inherit;}
+  input,select,textarea{padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-2);color:var(--text);font-size:0.9rem;font-family:inherit;transition:border-color 0.15s ease, box-shadow 0.15s ease;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(55,196,122,0.15);}
   textarea{width:100%;min-height:70px;resize:vertical;}
-  button.btn{padding:7px 12px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-size:0.85rem;}
-  button.btn:hover{background:var(--accent-dark);}
-  button.btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent);}
-  button.btn.secondary:hover{background:var(--ok-bg);}
-  button.btn.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);}
-  button.btn.danger:hover{background:var(--bad-bg);}
-  button.icon-btn{background:none;border:none;cursor:pointer;color:var(--muted);font-size:1rem;padding:2px 6px;}
-  button.icon-btn:hover{color:var(--danger);}
+  button.btn{padding:9px 16px;border-radius:999px;border:none;background:var(--grad);color:#08150f;cursor:pointer;font-size:0.85rem;font-weight:700;font-family:inherit;transition:transform 0.15s ease, box-shadow 0.15s ease;box-shadow:0 3px 10px rgba(55,196,122,0.25);}
+  button.btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(55,196,122,0.35);}
+  button.btn:active{transform:translateY(0);}
+  button.btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent);box-shadow:none;}
+  button.btn.secondary:hover{background:var(--ok-bg);transform:translateY(-1px);box-shadow:none;}
+  button.btn.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);box-shadow:none;}
+  button.btn.danger:hover{background:var(--bad-bg);transform:translateY(-1px);box-shadow:none;}
+  button.icon-btn{background:none;border:none;cursor:pointer;color:var(--muted);font-size:1rem;padding:5px 8px;border-radius:8px;transition:all 0.15s ease;}
+  button.icon-btn:hover{color:var(--danger);background:var(--bad-bg);}
   table{width:100%;border-collapse:collapse;font-size:0.9rem;}
-  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);}
-  th{color:var(--muted);font-weight:600;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.03em;}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--border);}
+  th{color:var(--muted);font-weight:600;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;}
+  tbody tr{transition:background 0.15s ease;}
+  tbody tr:hover{background:rgba(255,255,255,0.02);}
   tr.expiring-soon td{background:var(--warn-bg);}
   tr.expired td{background:var(--bad-bg);}
-  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:600;}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;letter-spacing:0.01em;}
   .badge.ok{background:var(--ok-bg);color:var(--ok-fg);}
   .badge.warn{background:var(--warn-bg);color:var(--warn-fg);}
   .badge.bad{background:var(--bad-bg);color:var(--bad-fg);}
   .muted{color:var(--muted);font-size:0.85rem;}
-  .empty{color:var(--muted);font-style:italic;padding:12px 0;}
-  .recipe-card{border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;}
-  .recipe-card h3{margin:0 0 4px 0;font-size:1.05rem;}
-  .recipe-card .ing-list{margin:8px 0;padding-left:0;list-style:none;}
-  .recipe-card .ing-list li{padding:2px 0;font-size:0.88rem;display:flex;justify-content:space-between;gap:8px;}
-  .recipe-card .actions{margin-top:8px;display:flex;gap:6px;}
-  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:50;}
-  .modal{background:var(--panel);border-radius:var(--radius);padding:20px;width:100%;max-width:560px;border:1px solid var(--border);}
-  .modal h2{margin-top:0;font-size:1.1rem;}
-  .field{margin-bottom:10px;}
-  .field label{display:block;font-size:0.8rem;color:var(--muted);margin-bottom:3px;}
+  .empty{color:var(--muted);text-align:center;padding:40px 20px;}
+  .empty .empty-icon{font-size:2.4rem;display:block;margin-bottom:10px;opacity:0.7;}
+  .recipe-card{border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px;background:var(--panel-2);position:relative;overflow:hidden;transition:transform 0.15s ease, box-shadow 0.15s ease;}
+  .recipe-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--grad);}
+  .recipe-card:hover{transform:translateY(-2px);box-shadow:var(--shadow);}
+  .recipe-card h3{margin:0 0 4px 0;font-size:1.1rem;font-weight:700;}
+  .recipe-card .ing-list{margin:10px 0;padding-left:0;list-style:none;}
+  .recipe-card .ing-list li{padding:5px 0;font-size:0.88rem;display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--border);}
+  .recipe-card .ing-list li:last-child{border-bottom:none;}
+  .recipe-card .actions{margin-top:12px;display:flex;gap:6px;}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:50;animation:fadeIn 0.15s ease;}
+  .modal{background:var(--panel);border-radius:var(--radius);padding:24px;width:100%;max-width:560px;border:1px solid var(--border);box-shadow:var(--shadow);}
+  .modal h2{margin-top:0;font-size:1.2rem;font-weight:700;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:0.78rem;color:var(--muted);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em;}
   .field input, .field select, .field textarea{width:100%;}
   .ing-row{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:6px;margin-bottom:6px;}
-  .week-nav{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
-  .plan-grid{display:grid;grid-template-columns:100px repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;font-size:0.82rem;}
-  .plan-grid .cell{background:var(--panel);padding:6px;min-height:54px;}
-  .plan-grid .head{background:var(--bg);font-weight:600;text-align:center;padding:8px 4px;}
-  .plan-grid .meal-label{background:var(--bg);font-weight:600;display:flex;align-items:center;padding:6px;}
-  .plan-slot{cursor:pointer;border-radius:5px;padding:4px 5px;}
+  .week-nav{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+  .plan-grid{display:grid;grid-template-columns:100px repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;font-size:0.82rem;box-shadow:var(--shadow-sm);}
+  .plan-grid .cell{background:var(--panel-2);padding:7px;min-height:56px;}
+  .plan-grid .head{background:var(--panel);font-weight:700;text-align:center;padding:10px 4px;font-family:'Poppins',sans-serif;}
+  .plan-grid .meal-label{background:var(--panel);font-weight:700;display:flex;align-items:center;padding:8px;color:var(--accent);}
+  .plan-slot{cursor:pointer;border-radius:8px;padding:6px 7px;height:100%;transition:background 0.15s ease;}
   .plan-slot:hover{background:var(--ok-bg);}
   .plan-slot .name{font-weight:600;}
-  .plan-slot .placeholder{color:var(--muted);font-style:italic;}
-  .grocery-item{display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid var(--border);}
+  .plan-slot .placeholder{color:var(--muted);font-style:italic;opacity:0.6;}
+  .grocery-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:6px;background:var(--panel-2);border:1px solid var(--border);transition:opacity 0.15s ease;}
+  .grocery-item.checked{opacity:0.55;}
   .grocery-item.checked .label{text-decoration:line-through;color:var(--muted);}
   .grocery-item .label{flex:1;}
+  .grocery-item input[type=checkbox]{width:19px;height:19px;accent-color:var(--accent);cursor:pointer;}
   .source-tag{font-size:0.72rem;color:var(--muted);}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
-  .stat-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;}
-  .stat-box{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:120px;}
-  .stat-box .num{font-size:1.4rem;font-weight:700;}
-  .stat-box .lbl{font-size:0.78rem;color:var(--muted);}
+  .stat-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  .stat-box{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;min-width:130px;flex:1;box-shadow:var(--shadow-sm);transition:transform 0.15s ease;}
+  .stat-box:hover{transform:translateY(-2px);}
+  .stat-box .icon{font-size:1.1rem;opacity:0.8;}
+  .stat-box .num{font-size:1.7rem;font-weight:800;font-family:'Poppins',sans-serif;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .stat-box .lbl{font-size:0.78rem;color:var(--muted);margin-top:2px;}
   select.search-input, input.search-input{min-width:180px;}
 </style>
 </head>
@@ -91,13 +118,13 @@
 
 <div id="appRoot">
 <header>
-  <h1>🥕 Meal Inventory &amp; Grocery Planner</h1>
+  <h1><span class="brand-icon">🥕</span><span class="brand-text">Meal Planner</span></h1>
   <div class="sync-status" id="syncStatus">Connecting…</div>
   <nav id="tabNav">
-    <button data-tab="pantry" class="active">Pantry</button>
-    <button data-tab="recipes">Recipes</button>
-    <button data-tab="plan">Meal Plan</button>
-    <button data-tab="grocery">Grocery List</button>
+    <button data-tab="pantry" class="active">🥫 Pantry</button>
+    <button data-tab="recipes">📖 Recipes</button>
+    <button data-tab="plan">📅 Meal Plan</button>
+    <button data-tab="grocery">🛒 Grocery List</button>
   </nav>
 </header>
 <main>
@@ -122,7 +149,7 @@
         <thead><tr><th>Name</th><th>Category</th><th>Qty</th><th>Expiration</th><th>Low-stock at</th><th></th></tr></thead>
         <tbody id="pantryBody"></tbody>
       </table>
-      <div id="pantryEmpty" class="empty" style="display:none;">No pantry items yet. Add your first one above.</div>
+      <div id="pantryEmpty" class="empty" style="display:none;"><span class="empty-icon">🥫</span>No pantry items yet. Add your first one above.</div>
     </div>
   </section>
 
@@ -134,7 +161,7 @@
         <input class="search-input" id="recipeSearch" placeholder="Search recipes...">
       </div>
       <div id="recipeList"></div>
-      <div id="recipeEmpty" class="empty" style="display:none;">No recipes yet. Add one to start meal planning.</div>
+      <div id="recipeEmpty" class="empty" style="display:none;"><span class="empty-icon">📖</span>No recipes yet. Add one to start meal planning.</div>
     </div>
   </section>
 
@@ -168,7 +195,7 @@
         <button class="btn danger" id="clearAllGroceryBtn">Clear all</button>
       </div>
       <div id="groceryListEl"></div>
-      <div id="groceryEmpty" class="empty" style="display:none;">Your grocery list is empty.</div>
+      <div id="groceryEmpty" class="empty" style="display:none;"><span class="empty-icon">🛒</span>Your grocery list is empty.</div>
     </div>
   </section>
 
@@ -390,14 +417,14 @@
     var expired = state.pantry.filter(function(p){ var d = daysUntil(p.expiration); return d !== null && d < 0; }).length;
     var lowStock = state.pantry.filter(function(p){ return p.threshold !== "" && p.threshold !== null && p.threshold !== undefined && parseFloat(p.qty) <= parseFloat(p.threshold); }).length;
     document.getElementById("pantryStats").innerHTML = [
-      statBox(total, "Items in pantry"),
-      statBox(expiringSoon, "Expiring within 3 days"),
-      statBox(expired, "Expired"),
-      statBox(lowStock, "Low stock")
+      statBox("📦", total, "Items in pantry"),
+      statBox("⏳", expiringSoon, "Expiring within 3 days"),
+      statBox("🚫", expired, "Expired"),
+      statBox("📉", lowStock, "Low stock")
     ].join("");
   }
-  function statBox(num, lbl){
-    return '<div class="stat-box"><div class="num">'+num+'</div><div class="lbl">'+escapeHtml(lbl)+'</div></div>';
+  function statBox(icon, num, lbl){
+    return '<div class="stat-box"><div class="icon">'+icon+'</div><div class="num">'+num+'</div><div class="lbl">'+escapeHtml(lbl)+'</div></div>';
   }
 
   function renderPantry(){
